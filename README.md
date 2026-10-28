@@ -17,16 +17,16 @@ This SQL portfolio project explores customer purchasing behavior in an e-commerc
 ## Tools & SQL Skills
 
 - **Database:** PostgreSQL
-- **SQL techniques:** CTEs, joins, aggregate functions, `CASE`, `PERCENTILE_CONT`, `ROW_NUMBER()`, `MIN() OVER`, windowed totals, date arithmetic, and views
+- **SQL techniques:** CTEs, joins, aggregate functions, `CASE`, `PERCENTILE_CONT`, `ROW_NUMBER()`, `MIN() OVER`, `SUM() OVER()`, percentage-of-total calculations, date arithmetic, and views
 - **Development:** DBeaver / pgAdmin
-- **Visualization:** Charts described in the original project documentation; add exported images to `images/` before linking them here
+- **Visualization:** Customer segmentation, acquisition cohort, and churn charts in the `images/` folder
 
 ## Project Files
 
 | File | Purpose |
 | --- | --- |
 | [`0_view_cohort_analysis.sql`](0_view_cohort_analysis.sql) | Prepare the `cohort_analysis` view from sales and customer data |
-| [`1_customer_segmentation.sql`](1_customer_segmentation.sql) | Group customers into low-, mid-, and high-value segments using LTV quartiles |
+| [`1_customer_segmentation.sql`](1_customer_segmentation.sql) | Group customers using historical customer revenue quartiles and calculate each segment’s share of total revenue |
 | [`2_cohort_analysis.sql`](2_cohort_analysis.sql) | Summarize revenue and customer count **on first-purchase dates** by acquisition year |
 | [`3_retension_analysis.sql`](3_retension_analysis.sql) | Classify each customer by last-purchase recency and calculate cohort status percentages |
 
@@ -56,21 +56,46 @@ I calculated each customer's historical revenue (called **LTV** in this project)
 - **Mid-value:** from the 25th through the 75th percentile
 - **High-value:** above the 75th percentile
 
-The query reports **total segment revenue, customer count, and average customer revenue**.
+The updated query reports **total revenue, customer count, average historical revenue per customer, and percentage contribution to overall revenue** for each segment.
 
-### Findings reported in the original README
+### Revenue contribution calculation
 
-| Customer segment | Approx. share of customers | Reported revenue | Reported share of revenue |
-| --- | ---: | ---: | ---: |
-| High-value | 25% | $135.4M | 66% |
-| Mid-value | 50% | $66.6M | 32% |
-| Low-value | 25% | $4.3M | 2% |
+The new `percent_contribution` column calculates each segment’s revenue as a proportion of revenue across all three segments:
 
-These figures are carried over from the original project notes; the raw dataset and exported query output were not supplied here for independent verification.
+```sql
+SELECT
+    *,
+    (total_ltv / SUM(total_ltv) OVER ()) * 100 AS percent_contribution
+FROM (
+    -- Segment-level aggregation from 1_customer_segmentation.sql
+    ...
+) AS segment_summary;
+```
 
-**Business implication:** High-value customers account for a disproportionate share of historical revenue. A targeted loyalty initiative could help preserve these relationships, while mid-value customers could be targeted with relevant cross-sell offers.
+`SUM(total_ltv) OVER ()` totals revenue across the segment-level result rows. Dividing each segment’s revenue by this overall total and multiplying by 100 produces its percentage contribution. See the linked SQL file for the complete working query.
 
-> **Metric note:** Here, “LTV” is cumulative observed revenue per customer, **not** predicted future customer lifetime value or profit.
+### Results
+
+| Customer segment | Customers | Share of customers | Historical revenue | Average revenue per customer | Revenue contribution |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| High-value | 12,372 | ~25% | $135.61M | $10,960.80 | **65.74%** |
+| Mid-value | 24,743 | ~50% | $66.37M | $2,682.29 | **32.17%** |
+| Low-value | 12,372 | ~25% | $4.30M | $347.43 | **2.08%** |
+| **Total** | **49,487** | **100%** | **$206.27M** | — | **~100%** |
+
+*Figures are rounded from the query-result screenshot. Revenue is labeled USD based on the original project notes; confirm the dataset's currency convention before external financial reporting. Percentage totals may differ slightly from 100% due to rounding.*
+
+![Customer segmentation analysis](images/1_customer_segementation.png)
+
+### Key insights
+
+- **Revenue concentration:** About one-quarter of customers generate **65.74%** of historical revenue. Retaining high-spending customers could therefore be important for protecting sales.
+- **Mid-value growth opportunity:** Half of the customer base contributes **32.17%** of revenue. This group is suitable for testing targeted cross-sell and loyalty campaigns.
+- **Low-value segment:** A quarter of customers accounts for only **2.08%** of revenue. Assess acquisition costs and engagement patterns before investing in broad promotions.
+
+**Business recommendation:** Prioritize personalized retention for high-value customers, test purchase-frequency improvements for mid-value customers, and evaluate cost-effective re-engagement for low-value customers. These are proposals, not measured campaign results.
+
+> **Metric note:** “LTV” here means cumulative **observed revenue** per customer, not predicted future customer lifetime value or customer profit. The percentile-based segment sizes are a consequence of the chosen grouping method, while their *revenue contribution percentages* are the analytical finding.
 
 ## 3. Acquisition Cohort Analysis
 
@@ -90,6 +115,8 @@ The filter `WHERE orderdate = first_purchase_date` is important: this query **do
 - A reduction in customer acquisition was reported for 2023.
 
 These observations should be checked against saved query results before presenting them as verified numerical conclusions. Cohorts of different ages should not be compared as full lifetime-value cohorts without accounting for their different observation periods.
+
+![Acquisition cohort analysis](images/2_cohort_analysis.png)
 
 **Business implication:** Investigate changes in acquisition mix, first-order basket size, and promotional strategy before concluding that newly acquired customers have lower long-term value.
 
@@ -114,13 +141,15 @@ The original analysis notes described roughly **90% churn** and **8–10% active
 - The six-month cutoff is measured relative to the **latest order date in the dataset**, not today's date.
 - The current query **includes customers acquired during the last six months**. As a result, newer cohorts have had less time to become inactive, making direct comparisons with older cohorts potentially misleading.
 
+![Customer churn by cohort](images/3_customer_churn_cohort_year.png)
+
 **Business implication:** Consider win-back campaigns for historically valuable inactive customers, and test engagement interventions before the six-month inactivity threshold is reached.
 
 ## Strategic Recommendations
 
 | Priority | Recommendation | Rationale |
 | --- | --- | --- |
-| Protect high-value customers | Pilot VIP benefits and personalized retention offers | High-value customers contribute most reported revenue |
+| Protect high-value customers | Pilot VIP benefits and personalized retention offers | High-value customers account for ~65.74% of historical revenue |
 | Grow mid-value relationships | Test relevant bundles, recommendations, or cross-sell campaigns | This segment represents a large share of the customer base |
 | Improve acquisition quality | Monitor first-purchase revenue, cohort size, and subsequent repeat purchase | First-order results alone do not reveal full cohort LTV |
 | Address inactivity | Test targeted reactivation campaigns and measure incremental return | Six-month inactivity can identify a practical outreach audience |

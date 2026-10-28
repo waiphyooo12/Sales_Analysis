@@ -23,13 +23,17 @@ WITH customer_ltv AS (
 	FROM customer_ltv c,
 		customer_segments cs
 )
+select *,(total_ltv / sum(total_ltv) over())*100 as percent_contribution
+from 
+(
 SELECT
 	customer_segment,
 	SUM(total_ltv) AS total_ltv,
 	COUNT(customerkey) AS customer_count,
 	SUM(total_ltv) / COUNT(customerkey) AS avg_customer_ltv
+
 FROM segment_values
 GROUP BY
 	customer_segment
 ORDER BY
-	customer_segment DESC
+	customer_segment DESC)
